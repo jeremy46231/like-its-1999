@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+
+# Large VM assets
+*.img
+*.iso
+*.bin.zst
+emulator/images/
+public/images/

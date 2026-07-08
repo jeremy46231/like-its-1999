@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>emulator — Like It's '99</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #000;
+        color: #ccc;
+        font: 13px monospace;
+        overflow: hidden;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+      }
+      #toolbar {
+        flex: 0 0 auto;
+        padding: 4px 8px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      /* Holds the emulator, centered, and is the element that goes fullscreen. */
+      #screen_holder {
+        flex: 1 1 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+      /* screen_go_fullscreen() fullscreens #screen_container specifically, so
+         center the canvas on black there. */
+      #screen_container:fullscreen {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        background: #000;
+      }
+      /* v86 renders text mode into the <div> and graphics into the <canvas>;
+         it toggles their visibility itself. Force nearest-neighbour scaling so
+         the pixel art stays crisp — v86 only sets this itself at scale >= 1, but
+         we scale by fractional amounts to hit exact integer device multiples. */
+      #screen_container canvas {
+        image-rendering: pixelated;
+      }
+      #screen_container div {
+        white-space: pre;
+        font: 14px monospace;
+        line-height: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="toolbar">
+      <button id="fullscreen" type="button">Fullscreen</button>
+      <span id="status">initializing…</span>
+    </div>
+    <div id="screen_holder">
+      <div id="screen_container">
+        <div></div>
+        <canvas style="display: none"></canvas>
+      </div>
+    </div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

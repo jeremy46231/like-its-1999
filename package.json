@@ -1,0 +1,17 @@
+{
+  "private": true,
+  "scripts": {
+    "fetch-image": "bash scripts/fetch-image.sh",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "v86": "^0.5.424",
+    "vite": "^8.1.3"
+  }
+}
