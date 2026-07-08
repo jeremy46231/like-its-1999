@@ -25,6 +25,11 @@
         gap: 12px;
         align-items: center;
       }
+      /* The parent adds .fs to <body> when it fullscreens the iframe — hide the
+         toolbar so only the Win98 screen shows. */
+      body.fs #toolbar {
+        display: none;
+      }
       /* Holds the emulator, centered, and is the element that goes fullscreen. */
       #screen_holder {
         flex: 1 1 auto;
@@ -33,14 +38,11 @@
         justify-content: center;
         overflow: hidden;
       }
-      /* screen_go_fullscreen() fullscreens #screen_container specifically, so
-         center the canvas on black there. */
-      #screen_container:fullscreen {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 100%;
-        height: 100%;
+      /* We fullscreen the holder (not the canvas' container) so #screen_container
+         keeps shrink-wrapping the canvas — v86 maps the absolute mouse against the
+         container's rect, so container==canvas keeps the cursor accurate. The
+         holder just centers the canvas on black. */
+      #screen_holder:fullscreen {
         background: #000;
       }
       /* v86 renders text mode into the <div> and graphics into the <canvas>;

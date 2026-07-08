@@ -10,6 +10,8 @@
         margin: 0;
         height: 100%;
       }
+      /* Placeholder shell — becomes a 1999-style landing page later. For now it's a
+         full-bleed frame around the emulator. */
       body {
         display: flex;
       }
@@ -20,11 +22,42 @@
     </style>
   </head>
   <body>
+    <!-- allowfullscreen lets the parent put the iframe into fullscreen. -->
     <iframe
       src="/emulator/"
       title="Windows 98"
       allowfullscreen
-      allow="fullscreen; pointer-lock; keyboard-map"
+      allow="fullscreen"
     ></iframe>
+
+    <script>
+      const iframe = document.querySelector('iframe')
+
+      // The emulator's Fullscreen button lives inside the iframe, but the Keyboard
+      // Lock API is top-level-only — so the iframe calls this synchronously on click.
+      // The click's user activation propagates to us (the top document), so both
+      // requestFullscreen and keyboard.lock() have the activation they need here.
+      window.enterEmulatorFullscreen = () => {
+        try {
+          navigator.keyboard?.lock?.()
+        } catch {}
+        iframe.requestFullscreen?.().catch(() => {})
+      }
+
+      // Fullscreen is owned by this (parent) document, so the iframe can't see it via
+      // document.fullscreenElement — tell it, so it can hide its toolbar and rescale.
+      document.addEventListener('fullscreenchange', () => {
+        const on = document.fullscreenElement === iframe
+        if (!on) {
+          try {
+            navigator.keyboard?.unlock?.()
+          } catch {}
+        }
+        iframe.contentWindow?.postMessage(
+          { type: 'fullscreen', on },
+          location.origin
+        )
+      })
+    </script>
   </body>
 </html>
