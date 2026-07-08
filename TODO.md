@@ -1,6 +1,6 @@
 - [ ] 1999-style landing page [here](index.html)
 - [ ] better integration around v86
-  - [ ] save state to localstorage
+  - [x] save state to localstorage
     - [ ] upload state to server (requires server, later)
   - [ ] more buttons to do things (what v86 apis do we care about?)
   - [x] custom disk image with 1999 dev tools

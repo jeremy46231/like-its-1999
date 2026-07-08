@@ -9,5 +9,4 @@ dist/
 *.bin.zst
 emulator/images/
 public/images/
-public/dev/
 public/vm/

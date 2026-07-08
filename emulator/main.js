@@ -4,6 +4,13 @@ import { V86 } from 'v86'
 import wasmUrl from 'v86/build/v86.wasm?url'
 import seabiosUrl from './vendor/bios/seabios.bin?url'
 import vgabiosUrl from './vendor/bios/vgabios.bin?url'
+import {
+  loadSavedState,
+  saveState,
+  clearSavedState,
+  exportState,
+  importState,
+} from './persist.js'
 
 // Our custom Windows 98 image (built in tmp-image-build/, checkpoint 03):
 //   - C: (hda) — Win98 SE + absolute mouse (vbmouse) + True Color (VBEMP) + the
@@ -16,6 +23,10 @@ import vgabiosUrl from './vendor/bios/vgabios.bin?url'
 // in-memory overlay that is never written back — so D: is effectively read-only and
 // only C: writes matter for a submission.
 const VM = '/vm/'
+
+// If the user has a saved session (IndexedDB), boot straight into it; otherwise boot
+// the shipped instant-boot snapshot. Top-level await is fine in an ES module.
+const savedState = await loadSavedState()
 
 const emulator = new V86({
   wasm_path: wasmUrl,
@@ -41,9 +52,12 @@ const emulator = new V86({
     fixed_chunk_size: 256 * 1024,
   },
 
-  // Instant boot: restore the settled-desktop snapshot (RAM+CPU) instead of cold
-  // booting. v86's built-in zstd decompresses the .zst.
-  initial_state: { url: VM + 'state.bin.zst' },
+  // Instant boot: restore a saved session if we have one, else the shipped
+  // settled-desktop snapshot. v86's built-in zstd decompresses the shipped .zst;
+  // saved sessions come in already-decompressed as a buffer.
+  initial_state: savedState
+    ? { buffer: savedState }
+    : { url: VM + 'state.bin.zst' },
 
   autostart: true,
 })
@@ -126,7 +140,8 @@ document.addEventListener('fullscreenchange', rescale)
 document.getElementById('fullscreen').addEventListener('click', () => {
   let parentFn = null
   try {
-    if (window.parent !== window) parentFn = window.parent.enterEmulatorFullscreen
+    if (window.parent !== window)
+      parentFn = window.parent.enterEmulatorFullscreen
   } catch {}
   if (parentFn) parentFn()
   else holder.requestFullscreen?.().catch(() => {})
@@ -139,6 +154,69 @@ window.addEventListener('message', (e) => {
   document.body.classList.toggle('fs', e.data.on)
   rescale()
 })
+
+// --- State persistence --------------------------------------------------------
+// Save the running session (gzip-compressed) to IndexedDB, restore it on next load
+// (see the initial_state above), and export/import it as a file — the same artifact
+// we'll upload to / download from the server later.
+const $ = (id) => document.getElementById(id)
+const clock = () =>
+  new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+let saving = false
+async function doSave(label = 'saved') {
+  if (saving) return
+  saving = true
+  try {
+    const bytes = await saveState(emulator)
+    setStatus(`${label} ${clock()} · ${(bytes / 1e6).toFixed(1)} MB`)
+  } catch (e) {
+    setStatus('save failed')
+    console.error(e)
+  } finally {
+    saving = false
+  }
+}
+
+$('save')?.addEventListener('click', () => doSave())
+$('export')?.addEventListener('click', () => exportState(emulator))
+$('import-btn')?.addEventListener('click', () => $('import')?.click())
+$('import')?.addEventListener('change', async (e) => {
+  const file = e.target.files?.[0]
+  if (!file) return
+  setStatus('importing…')
+  const ok = await importState(emulator, file)
+  setStatus(ok ? `imported ${clock()}` : 'import failed (not a valid state)')
+  e.target.value = ''
+})
+$('reset')?.addEventListener('click', async () => {
+  if (!confirm('Discard your saved session and reset to the clean image?'))
+    return
+  await clearSavedState()
+  location.reload()
+})
+
+// Autosave periodically and when the tab is hidden (best-effort before close).
+setInterval(() => doSave('autosaved'), 120_000)
+
+// Listen on the TOP document (same-origin): the iframe's own visibilitychange is
+// unreliable, and the top document is the authoritative tab-visibility source. We
+// prefer visibilitychange over 'blur' — blur fires on every focus change (devtools,
+// alt-tab to another app, address bar), far too often for a ~65 MB save, and it also
+// fires while the tab is still visible. This only fires when the tab is genuinely
+// hidden (switch/minimize/close). pagehide is a best-effort catch for navigation/
+// close (async may not finish there — the 2-min timer is the real safety net).
+const topDoc = (() => {
+  try {
+    return window.top.document
+  } catch {
+    return document
+  }
+})()
+topDoc.addEventListener('visibilitychange', () => {
+  if (topDoc.visibilityState === 'hidden') doSave('autosaved')
+})
+window.addEventListener('pagehide', () => doSave('autosaved'))
 
 // Expose for poking around in the console during development.
 window.emulator = emulator
