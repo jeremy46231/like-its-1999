@@ -244,5 +244,22 @@ topDoc.addEventListener('visibilitychange', () => {
 })
 window.addEventListener('pagehide', () => doSave('autosaved'))
 
+// Warn before the tab actually closes/navigates away, and kick off a best-effort
+// save right then too — visibilitychange usually beats us to it, but this covers
+// browsers/paths where hidden fires late or not at all. beforeunload must be bound
+// on the top window (closing/navigating the iframe alone doesn't leave the page).
+const topWin = (() => {
+  try {
+    return window.top
+  } catch {
+    return window
+  }
+})()
+topWin.addEventListener('beforeunload', (e) => {
+  doSave('autosaved')
+  e.preventDefault()
+  e.returnValue = ''
+})
+
 // Expose for poking around in the console during development.
 window.emulator = emulator
