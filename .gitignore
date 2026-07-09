@@ -3,6 +3,10 @@ dist/
 .DS_Store
 *.log
 
+.env
+.env.local
+.env.*.local
+
 # Large VM assets
 *.img
 *.iso

@@ -18,11 +18,15 @@ import {
 //   - D: (hdb) — the toolkit: EditPlus, Netscape (Communicator+Composer), Paint
 //     Shop Pro 6, GIF Construction Set, WS_FTP LE, Flash 4.
 //   - state.bin.zst — instant-boot RAM snapshot of the settled desktop.
-// Served from /vm/ (gitignored; built locally, hosted on the server for the event).
 // The disks are async: reads stream in 256 KiB chunks and guest writes go to an
 // in-memory overlay that is never written back — so D: is effectively read-only and
 // only C: writes matter for a submission.
-const VM = '/vm/'
+//
+// Base URL for these assets. Local dev serves them from /vm/ (Vite static, gitignored).
+// The images are ~1.3 GB — too big for the Vercel deploy — so in production they live
+// on object storage (Cloudflare R2). Point VITE_VM_BASE at that bucket's public URL;
+// it MUST end in a slash and the host MUST support HTTP Range requests + CORS.
+const VM = import.meta.env.VITE_VM_BASE || '/vm/'
 
 // If the user has a saved session (IndexedDB), boot straight into it; otherwise boot
 // the shipped instant-boot snapshot. Top-level await is fine in an ES module.
