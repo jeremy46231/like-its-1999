@@ -11,6 +11,7 @@ import {
   exportState,
   importState,
 } from './persist.js'
+import { createFileBrowser, openLiveFs } from './vmfs/filebrowser.js'
 
 // Our custom Windows 98 image (built in tmp-image-build/, checkpoint 03):
 //   - C: (hda) — Win98 SE + absolute mouse (vbmouse) + True Color (VBEMP) + the
@@ -193,6 +194,27 @@ $('import')?.addEventListener('change', async (e) => {
   setStatus(ok ? `imported ${clock()}` : 'import failed (not a valid state)')
   e.target.value = ''
 })
+// File browser: read the disks straight from the live VM's buffers (merges the
+// guest's writes and reuses v86's chunk cache — no save_state, no re-download) and let
+// the user download files / folders. Built lazily on first click, then reused; each
+// disk's FAT is only read when that disk is first opened.
+let browser = null
+$('browse')?.addEventListener('click', async () => {
+  try {
+    if (!browser)
+      browser = createFileBrowser({
+        disks: [
+          { label: 'C:\\', fs: () => openLiveFs(emulator, 'hda') },
+          { label: 'D:\\', fs: () => openLiveFs(emulator, 'hdb') },
+        ],
+      })
+    browser.open('/')
+  } catch (e) {
+    setStatus('browse failed: ' + e.message)
+    console.error(e)
+  }
+})
+
 $('reset')?.addEventListener('click', async () => {
   if (!confirm('Discard your saved session and reset to the clean image?'))
     return

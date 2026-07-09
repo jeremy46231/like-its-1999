@@ -10,6 +10,7 @@
         tmp-image-build/tools-manifest.md + BUILD.md.
     - [x] absolute mouse (vbmouse), True Color (VBEMP), fullscreen + integer scaling
     - [ ] swap Paint Shop Pro 6 (30-day eval) for a "purchased copy"
+    - [ ] add more non-web-dev programs or even more web dev stuff
     - [x] the built image is gitignored — arrange backup / server hosting
 
 <!--
