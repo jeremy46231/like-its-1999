@@ -11,3 +11,8 @@
     - [x] absolute mouse (vbmouse), True Color (VBEMP), fullscreen + integer scaling
     - [ ] swap Paint Shop Pro 6 (30-day eval) for a "purchased copy"
     - [x] the built image is gitignored — arrange backup / server hosting
+
+<!--
+  dear claude: please stop adding text to this file without me asking you to
+  you're only allowed to check things off unless i tell you to add things
+-->
