@@ -11,15 +11,15 @@ parser drives two jobs:
 
 ## Modules (all dependency-free ES modules)
 
-| file          | what it is                                                                                                             |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `state.js`    | parse a v86 state (magic `0x86768676` v6); extract disk overlays; `maybeGunzip`                                        |
-| `blockdev.js` | `OverlayBlockDevice` (overlay painted over a base) + base sources (`nodeFileSource`, `httpRangeSource`, `bufferSource`) + `v86Device` (live emulator) |
-| `fat.js`      | `FatFs` — read-only FAT12/16/32 with VFAT long names: `readdir` / `readFile` / `walk` / `resolve`                      |
-| `zip.js`      | `ZipWriter` + `zipTree` — isomorphic ZIP (STORE/DEFLATE, no deps)                                                      |
-| `extract.js`  | `openStateFs`, `exportDirZip`, `exportFilesZip` + a Node CLI                                                           |
-| `flatten.js`  | `flattenOne`, `applyOverlayToFile` + a Node CLI                                                                        |
-| `filebrowser.js` | `<dialog>` file browser UI + `openLiveFs(emulator)` + `downloadDirZip` (browser)                                   |
+| file             | what it is                                                                                                                                            |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state.js`       | parse a v86 state (magic `0x86768676` v6); extract disk overlays; `maybeGunzip`                                                                       |
+| `blockdev.js`    | `OverlayBlockDevice` (overlay painted over a base) + base sources (`nodeFileSource`, `httpRangeSource`, `bufferSource`) + `v86Device` (live emulator) |
+| `fat.js`         | `FatFs` — read-only FAT12/16/32 with VFAT long names: `readdir` / `readFile` / `walk` / `resolve`                                                     |
+| `zip.js`         | `ZipWriter` + `zipTree` — isomorphic ZIP (STORE/DEFLATE, no deps)                                                                                     |
+| `extract.js`     | `openStateFs`, `exportDirZip`, `exportFilesZip` + a Node CLI                                                                                          |
+| `flatten.js`     | `flattenOne`, `applyOverlayToFile` + a Node CLI                                                                                                       |
+| `filebrowser.js` | `<dialog>` file browser UI + `openLiveFs(emulator)` + `downloadDirZip` (browser)                                                                      |
 
 A base disk image is any object with `readRange(offset, length) -> Uint8Array`.
 Locally that's `nodeFileSource('public/vm/hda.img')`; in the browser it's

@@ -98,7 +98,12 @@ const fmtSize = (n) =>
       ? `${(n / 1024).toFixed(1)} KB`
       : `${(n / 1048576).toFixed(1)} MB`
 
-export function createFileBrowser({ disks, fs, title = 'C:\\', onDownload } = {}) {
+export function createFileBrowser({
+  disks,
+  fs,
+  title = 'C:\\',
+  onDownload,
+} = {}) {
   injectStyles()
   const list0 = disks || [{ label: title, fs }]
   // Normalise each disk's fs into a lazily-resolved, cached getter.
@@ -107,7 +112,8 @@ export function createFileBrowser({ disks, fs, title = 'C:\\', onDownload } = {}
     return {
       label: d.label,
       async get() {
-        if (!resolved) resolved = typeof d.fs === 'function' ? await d.fs() : d.fs
+        if (!resolved)
+          resolved = typeof d.fs === 'function' ? await d.fs() : d.fs
         return resolved
       },
     }
