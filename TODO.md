@@ -1,4 +1,5 @@
 - [ ] 1999-style landing page [here](index.html)
+  - [ ] optional MIDI background music — plays on the ENTER/BOOT click (browsers block autoplay), with a mute toggle; needs a `<bgsound>`/autoplay shim
 - [ ] better integration around v86
   - [x] save state to localstorage
     - [ ] upload state to server (requires server, later)

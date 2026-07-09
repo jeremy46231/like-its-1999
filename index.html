@@ -1,63 +1,214 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Like It's 1999</title>
-    <style>
-      html,
-      body {
-        margin: 0;
-        height: 100%;
-      }
-      /* Placeholder shell — becomes a 1999-style landing page later. For now it's a
-         full-bleed frame around the emulator. */
-      body {
-        display: flex;
-      }
-      iframe {
-        flex: 1;
-        border: 0;
-      }
-    </style>
-  </head>
-  <body>
-    <!-- allowfullscreen lets the parent put the iframe into fullscreen. -->
-    <iframe
-      src="/emulator/"
-      title="Windows 98"
-      allowfullscreen
-      allow="fullscreen"
-    ></iframe>
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<title>* * * Like It's 1999 ! ! ! * * *</title>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<style type="text/css">
+  blink { animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { visibility: hidden; } }
+  img { image-rendering: pixelated; }
+</style>
+</head>
 
-    <script>
-      const iframe = document.querySelector('iframe')
+<basefont face="Times New Roman" size="3" color="#ffff00">
 
-      // The emulator's Fullscreen button lives inside the iframe, but the Keyboard
-      // Lock API is top-level-only — so the iframe calls this synchronously on click.
-      // The click's user activation propagates to us (the top document), so both
-      // requestFullscreen and keyboard.lock() have the activation they need here.
-      window.enterEmulatorFullscreen = () => {
-        try {
-          navigator.keyboard?.lock?.()
-        } catch {}
-        iframe.requestFullscreen?.().catch(() => {})
-      }
+<body bgcolor="#000080" text="#ffff00" link="#00ffff" vlink="#ff66ff" alink="#ff0000">
 
-      // Fullscreen is owned by this (parent) document, so the iframe can't see it via
-      // document.fullscreenElement — tell it, so it can hide its toolbar and rescale.
-      document.addEventListener('fullscreenchange', () => {
-        const on = document.fullscreenElement === iframe
-        if (!on) {
-          try {
-            navigator.keyboard?.unlock?.()
-          } catch {}
-        }
-        iframe.contentWindow?.postMessage(
-          { type: 'fullscreen', on },
-          location.origin
-        )
-      })
-    </script>
-  </body>
+<center>
+
+<marquee behavior="scroll" scrollamount="6" width="90%">
+<font face="Comic Sans MS" size="4" color="#00ff00">
+&nbsp; * * *  WELCOME TO LIKE IT'S 1999 ! ! !  * * * &nbsp; build a website using nothing but the software of the 1990s &nbsp; * * * &nbsp; ship it to me and i will mail you a real floppy disk with your code on it &nbsp; * * *
+</font>
+</marquee>
+
+<p>
+<img src="/gfx/sparkle-star.gif" alt="*" height="32" width="32">
+<font face="Comic Sans MS" size="7" color="#ffffff"><b>Like It's 1999</b></font>
+<img src="/gfx/sparkle-star.gif" alt="*" height="32" width="32">
+</p>
+
+<p>
+<font face="Arial" size="4" color="#00ffff">
+Hi, and welcome to my little corner of the web! :)<br>
+Pull up a chair and let me tell you what this whole thing is about.
+</font>
+</p>
+
+<p>
+<font face="Arial" size="2" color="#c0c0c0">
+This is a You Ship, We Ship program that I put together myself. My name is Jeremy!
+</font>
+</p>
+
+<p><img src="/gfx/under-construction-banner.gif" alt="Under Construction" height="100" width="413"></p>
+
+<!-- boot -->
+<p>
+<table border="4" cellpadding="10" cellspacing="0" bgcolor="#c0c0c0">
+<tr>
+  <td align="center" bgcolor="#008080">
+    <a href="/emulator/">
+    <font face="Arial" size="6" color="#ffffff"><b>BOOT WINDOWS&nbsp;98&nbsp;&raquo;</b></font></a>
+    <br>
+    <font face="Arial" size="2" color="#ffff00">
+    (this fires up the emulator, so give it a sec to wake up the hard drive)
+    </font>
+  </td>
+</tr>
+</table>
+<img src="/gfx/new-arrow-badge.gif" alt="NEW!" height="21" width="32">
+</p>
+
+<img src="/gfx/rainbow-divider.gif" alt="--------" height="14" width="432">
+
+<p>
+<font face="Arial" size="5" color="#00ff00"><b>What in the world is this?</b></font>
+</p>
+
+<table border="0" cellpadding="6" width="560">
+<tr><td>
+<font face="Arial" size="3" color="#ffffff">
+Okay, so here is the deal. When you click that big button up there, a real live
+Windows&nbsp;98 computer boots right up inside your web browser. It has got Netscape on
+it for surfing around, and EditPlus for writing your HTML, and Paint Shop Pro for
+making your graphics, and all sorts of other things that folks really did use back in
+the day.
+<br><br>
+What I would love for you to do is build a website on that old machine, and then send
+it over to me. The one big catch is that everything you use to make it has to be from
+before the year 2000. So no reaching for your fancy modern tools! It is just you and a
+beige box, putting a website together the way we all used to when the web was still
+young.
+</font>
+</td></tr>
+</table>
+
+<img src="/gfx/rainbow-divider.gif" alt="--------" height="14" width="432">
+
+<p>
+<font face="Arial" size="5" color="#00ff00"><b>You Ship &nbsp;&middot;&nbsp; We Ship</b></font>
+</p>
+
+<table border="3" cellpadding="12" cellspacing="0" width="560" bgcolor="#000000">
+<tr>
+  <td width="50%" valign="top" bgcolor="#00008b">
+    <font face="Arial" size="4" color="#ffff00"><b>&#187; YOU SHIP</b></font><br>
+    <font face="Arial" size="2" color="#ffffff">
+    A whole website that you built and finished on the Windows&nbsp;98 machine. It can
+    be about anything you like, and it can be great big or teeny tiny, just so long as
+    you made the entire thing in there with the old software.
+    </font>
+  </td>
+  <td width="50%" valign="top" bgcolor="#8b0000">
+    <font face="Arial" size="4" color="#ffff00"><b>&#187; WE SHIP</b></font><br>
+    <font face="Arial" size="2" color="#ffffff">
+    A real floppy disk with your very own code saved onto it, sent right to your
+    mailbox. I will have a look at what you made first, and then I will pop it in the
+    post to you.
+    </font>
+  </td>
+</tr>
+</table>
+
+<img src="/gfx/flame-divider.gif" alt="~~~~~~~~" height="42" width="567">
+
+<p>
+<img src="/gfx/hot-flame-badge.gif" alt="HOT!" height="32" width="94">
+<font face="Arial" size="5" color="#ff3300"><b>The Rules</b></font>
+<img src="/gfx/hot-flame-badge.gif" alt="HOT!" height="32" width="94">
+</p>
+
+<table border="0" cellpadding="6" width="560">
+<tr><td>
+<font face="Arial" size="3" color="#ffffff">
+<ol>
+<li align="left">
+  Everything you actually RUN has to be from before the year 2000. The way I think
+  about it, your browser and the emulator are the computer itself, and everything you
+  build your site with lives inside there.
+</li>
+<br>
+<li align="left">
+  You have got to build it inside the machine. Now, it is totally okay to use the real
+  internet on your own computer to look things up and learn how stuff works. But your
+  actual website has to be made in Windows&nbsp;98.
+</li>
+<br>
+<li align="left">
+  You have to ship a website that really and truly works. It needs to load up and
+  actually do something. A page that only says it is under construction does not count,
+  which, yes, I know is a little bit ironic.
+</li>
+<br>
+<li align="left">
+  Have fun with it! Pretend it is the last summer before the whole world got itself
+  into a panic about Y2K.
+</li>
+</ol>
+</font>
+</td></tr>
+</table>
+
+<img src="/gfx/rainbow-divider.gif" alt="--------" height="14" width="432">
+
+<p>
+<font face="Arial" size="5" color="#00ff00"><b>How to join in and submit</b></font>
+</p>
+
+<table border="0" cellpadding="6" width="560">
+<tr>
+  <td align="center" width="80" valign="top">
+    <img src="/gfx/mailbox-icon.gif" alt="mail" height="75" width="75">
+  </td>
+  <td valign="middle">
+    <font face="Arial" size="3" color="#ffffff">
+    1. Come and say hi to me over on Slack in
+    <a href="https://hackclub.enterprise.slack.com/archives/C0BG01T3RD4"><b>#like-its-1999</b></a>.
+    That is where I hang about, and you can find me there as
+    <a href="https://hackclub.enterprise.slack.com/team/U06UYA5GMB5"><b>@Jeremy</b></a>.
+    <br><br>
+    2. Click that BOOT button way up at the top and start building your site.
+    <br><br>
+    3. Once you have got it all finished, send it over to me right here:<br>
+    <a href="javascript:alert('meow')"><!-- todo: submit url -->
+    <font size="4" color="#ffff00"><b>&#187; Submit your project &#171;</b></font></a>
+    </font>
+  </td>
+</tr>
+</table>
+
+<img src="/gfx/rainbow-divider.gif" alt="--------" height="14" width="432">
+
+<p>
+<font face="Arial" size="2" color="#c0c0c0">This page is best viewed with:</font><br>
+<img src="/gfx/netscape-now-badge.gif" alt="Netscape Now!" height="30" width="90">
+&nbsp;
+<img src="/gfx/internet-explorer-badge.gif" alt="Internet Explorer" height="31" width="88">
+</p>
+
+<p>
+<font face="Courier New" size="2" color="#00ff00">
+You are visitor number
+<font color="#ffffff" style="background:#000000"><b>&nbsp;0&nbsp;0&nbsp;1&nbsp;9&nbsp;9&nbsp;9&nbsp;</b></font>
+</font>
+</p>
+
+<p>
+<img src="/gfx/dancing-guy-boombox.gif" alt="dancing" height="80" width="80">
+<img src="/gfx/black-cat-silhouette.gif" alt="cat" height="100" width="46">
+</p>
+
+<p>
+<font face="Arial" size="1" color="#808080">
+<blink><font color="#ffff00">Last updated:</font></blink> just now!<br>
+Like It's 1999 is a You Ship, We Ship program run by me, Jeremy. Feel free to write to
+me any time at <a href="mailto:jeremy@hackclub.com">jeremy@hackclub.com</a>.
+<br>
+&copy; 1999. Well okay, it is really 2026, but you would hardly know it around here.
+</font>
+</p>
+
+</center>
+</body>
 </html>
