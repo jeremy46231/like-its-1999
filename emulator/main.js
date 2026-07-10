@@ -240,6 +240,17 @@ $('cdrom-slot')?.replaceWith(
   createCdromControl({ emulator, presets: PRESETS, setStatus })
 )
 
+// Like pressing a real PC's reset button: reboots the CPU and reloads the BIOS in
+// place (v86's restart() -> cpu.reboot_internal()), but leaves RAM contents and every
+// disk (C:, D:, and whatever's in the CD-ROM drive) completely untouched — unlike
+// "Reset" below, nothing is discarded.
+$('reboot')?.addEventListener('click', () => {
+  if (!confirm('Force-reboot the machine? Unsaved work in open programs will be lost.'))
+    return
+  emulator.restart() // synchronous — cpu.reboot_internal() has already run by the time this returns
+  setStatus(`rebooted ${clock()}`)
+})
+
 $('reset')?.addEventListener('click', async () => {
   if (!confirm('Discard your saved session and reset to the clean image?'))
     return

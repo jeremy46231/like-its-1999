@@ -4,6 +4,8 @@
 // vmfs/filebrowser.js's dialog. See main.js for why set_cdrom()/eject_cdrom() need no
 // boot-time config, and why presets mount by URL while uploads mount as a buffer.
 import { buildMediaCdrom } from './media-import.js'
+import { buildIso9660 } from './vmfs/iso9660.js'
+import { uniqueBaseName } from './iso-name.js'
 
 const CSS = `
 .cdrom-dialog { width: min(420px, 92vw); padding: 0; border: 1px solid #888; background: #fff; color: #111; font: 13px system-ui, sans-serif; }
@@ -65,7 +67,7 @@ export function createCdromControl({ emulator, presets = [], setStatus = () => {
         <span class="title">Mount CD (E:\\)</span>
         <button data-close>Close</button>
       </div>
-      <div class="cdrom-section">
+      <div class="cdrom-section" data-files-section>
         <span class="label">Upload files</span>
         <span class="hint">Images: .png, .jpg, .gif (animated), .webp, .bmp</span>
         <span class="hint">Audio: .mp3, .wav, .ogg, .mid</span>
@@ -76,6 +78,7 @@ export function createCdromControl({ emulator, presets = [], setStatus = () => {
 
   const body = dialog.querySelector('.cdrom-body')
   const $ = (sel) => dialog.querySelector(sel)
+  const mountControlsExtra = [] // dev-only controls append themselves here
 
   if (presets.length) {
     const section = document.createElement('div')
@@ -107,6 +110,36 @@ export function createCdromControl({ emulator, presets = [], setStatus = () => {
     body.append(section)
   }
 
+  // Dev-only escape hatch on "Upload files" above: skip the reencode entirely and
+  // put raw file bytes straight onto the disc, unsanitized — for testing against
+  // files that specifically shouldn't survive the real pipeline (e.g. verifying a
+  // renamed non-image actually gets rejected by the real path, by comparing against
+  // what raw passthrough does instead). import.meta.env.DEV strips this whole block,
+  // including buildRawCdrom, from production.
+  let prepareFiles = (files) => buildMediaCdrom(files)
+  if (import.meta.env.DEV) {
+    const label = document.createElement('label')
+    label.innerHTML = '<input type="checkbox" data-skip-reencode /> Skip reencode (dev only)'
+    $('[data-files-section]').append(label)
+    const skipReencodeCheckbox = label.querySelector('[data-skip-reencode]')
+    mountControlsExtra.push(skipReencodeCheckbox)
+
+    const buildRawCdrom = async (files) => {
+      const used = new Set()
+      const entries = []
+      for (const file of files) {
+        const dot = file.name.lastIndexOf('.')
+        const ext = dot === -1 ? 'BIN' : file.name.slice(dot + 1)
+        const data = new Uint8Array(await file.arrayBuffer())
+        entries.push({ name: `${uniqueBaseName(file.name, used)}.${ext}`, data })
+      }
+      return buildIso9660({ volumeLabel: 'RAW', files: entries })
+    }
+
+    prepareFiles = (files) =>
+      skipReencodeCheckbox.checked ? buildRawCdrom(files) : buildMediaCdrom(files)
+  }
+
   const foot = document.createElement('div')
   foot.className = 'cdrom-foot'
   foot.innerHTML = '<span class="msg"></span>'
@@ -122,6 +155,7 @@ export function createCdromControl({ emulator, presets = [], setStatus = () => {
     $('[data-mount-preset]'),
     $('[data-preset]'),
     $('[data-iso]'),
+    ...mountControlsExtra,
   ].filter(Boolean)
   const setBusy = (b) => {
     busy = b
@@ -180,7 +214,7 @@ export function createCdromControl({ emulator, presets = [], setStatus = () => {
     e.target.value = ''
     if (!files.length) return
     mount(
-      () => buildMediaCdrom(files),
+      () => prepareFiles(files),
       (iso) => emulator.set_cdrom({ buffer: iso.buffer }),
       `${files.length} file(s)`
     )
