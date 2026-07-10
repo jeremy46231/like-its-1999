@@ -13,6 +13,7 @@ import {
 } from './persist.js'
 import { createFileBrowser, openLiveFs } from './vmfs/filebrowser.js'
 import { createCdromControl } from './cdrom-ui.js'
+import { installAtapiCdromFix } from './cdrom-atapi-fix.js'
 
 // Our custom Windows 98 image (built in tmp-image-build/, checkpoint 03):
 //   - C: (hda) — Win98 SE + absolute mouse (vbmouse) + True Color (VBEMP) + the
@@ -227,6 +228,8 @@ $('browse')?.addEventListener('click', async () => {
 // by URL (`{ url, size, async: true }`) rather than `{ buffer }` — that makes v86
 // treat it like hda/hdb (an AsyncXHRBuffer whose save_state only serializes its
 // sparse overlay), so a preset never gets embedded whole into every autosave.
+// URL mounts only work with the ATAPI patches below — see cdrom-atapi-fix.js.
+installAtapiCdromFix(emulator)
 const PRESETS = [
   {
     id: 'win98se',
@@ -245,7 +248,11 @@ $('cdrom-slot')?.replaceWith(
 // disk (C:, D:, and whatever's in the CD-ROM drive) completely untouched — unlike
 // "Reset" below, nothing is discarded.
 $('reboot')?.addEventListener('click', () => {
-  if (!confirm('Force-reboot the machine? Unsaved work in open programs will be lost.'))
+  if (
+    !confirm(
+      'Force-reboot the machine? Unsaved work in open programs will be lost.'
+    )
+  )
     return
   emulator.restart() // synchronous — cpu.reboot_internal() has already run by the time this returns
   setStatus(`rebooted ${clock()}`)

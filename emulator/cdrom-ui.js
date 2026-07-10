@@ -34,7 +34,11 @@ function injectStyles() {
 }
 
 // `presets`: [{ id, label, url, size }, ...]. `setStatus`: the toolbar status line.
-export function createCdromControl({ emulator, presets = [], setStatus = () => {} }) {
+export function createCdromControl({
+  emulator,
+  presets = [],
+  setStatus = () => {},
+}) {
   injectStyles()
 
   const btn = document.createElement('button')
@@ -119,7 +123,8 @@ export function createCdromControl({ emulator, presets = [], setStatus = () => {
   let prepareFiles = (files) => buildMediaCdrom(files)
   if (import.meta.env.DEV) {
     const label = document.createElement('label')
-    label.innerHTML = '<input type="checkbox" data-skip-reencode /> Skip reencode (dev only)'
+    label.innerHTML =
+      '<input type="checkbox" data-skip-reencode /> Skip reencode (dev only)'
     $('[data-files-section]').append(label)
     const skipReencodeCheckbox = label.querySelector('[data-skip-reencode]')
     mountControlsExtra.push(skipReencodeCheckbox)
@@ -131,13 +136,18 @@ export function createCdromControl({ emulator, presets = [], setStatus = () => {
         const dot = file.name.lastIndexOf('.')
         const ext = dot === -1 ? 'BIN' : file.name.slice(dot + 1)
         const data = new Uint8Array(await file.arrayBuffer())
-        entries.push({ name: `${uniqueBaseName(file.name, used)}.${ext}`, data })
+        entries.push({
+          name: `${uniqueBaseName(file.name, used)}.${ext}`,
+          data,
+        })
       }
       return buildIso9660({ volumeLabel: 'RAW', files: entries })
     }
 
     prepareFiles = (files) =>
-      skipReencodeCheckbox.checked ? buildRawCdrom(files) : buildMediaCdrom(files)
+      skipReencodeCheckbox.checked
+        ? buildRawCdrom(files)
+        : buildMediaCdrom(files)
   }
 
   const foot = document.createElement('div')
@@ -184,14 +194,12 @@ export function createCdromControl({ emulator, presets = [], setStatus = () => {
       const prepared = await prepare()
       if (myGen !== generation) return // superseded — drop this result entirely
 
-      // v86 raises the guest's media-change interrupt on eject() but not on a plain
-      // insert (checked tmp-v86/src/ide.js: set_disk_buffer(), used by set_cdrom()
-      // for every insert, never calls push_irq() — only eject() does). Swapping
-      // straight from one disc to another can leave the guest not proactively
-      // notified, only discovering the new disc whenever it happens to re-poll on
-      // its own — which is the "E: sometimes shows empty" bug. Ejecting first
-      // guarantees an interrupt actually fires. Safe unconditionally: eject() is a
-      // no-op if the drive's already empty.
+      // The guest is told about the swap via cdrom-atapi-fix.js: set_cdrom() sets
+      // v86's medium_changed flag, and the patched TEST UNIT READY turns that into
+      // the UNIT ATTENTION response Win98 actually reacts to. (The eject IRQ alone
+      // isn't it — Win98 ignores it and detects media purely by polling.) Ejecting
+      // first is kept as the physically honest sequence; it's a no-op if the
+      // drive's already empty and harmless otherwise.
       emulator.eject_cdrom()
       await apply(prepared)
       if (myGen !== generation) return // superseded mid-apply
