@@ -19,6 +19,7 @@ const CSS = `
 .cdrom-foot { display: flex; gap: 8px; padding: 8px 10px; }
 .cdrom-foot .msg { flex: 1; color: #888; align-self: center; }
 .cdrom-dialog button { cursor: pointer; }
+.cdrom-dialog button[disabled], .cdrom-dialog input[disabled] { opacity: .5; cursor: default; }
 .cdrom-body .cdrom-section:last-of-type { border-bottom: none; }
 `
 
@@ -37,8 +38,24 @@ export function createCdromControl({ emulator, presets = [], setStatus = () => {
   const btn = document.createElement('button')
   btn.type = 'button'
   let mounted = false
-  const renderBtn = () => (btn.textContent = mounted ? 'Eject CD' : 'Mount CD')
+  let busy = false
+  const renderBtn = () => {
+    btn.textContent = mounted ? 'Eject CD' : 'Mount CD'
+    btn.disabled = busy
+  }
   renderBtn()
+
+  // A restored saved session can already have a disc in the drive before this
+  // control ever runs a mount() itself (see persist.js) — sync the label once the
+  // emulator's devices actually exist, so "Mount CD" doesn't lie about an
+  // already-inserted disc. Same internal-reach pattern as vmfs/blockdev.js's
+  // openLiveFs (there's no public V86 API for "is a disc currently in the drive").
+  emulator.add_listener('emulator-started', () => {
+    if (emulator.v86?.cpu?.devices?.cdrom?.has_disk?.()) {
+      mounted = true
+      renderBtn()
+    }
+  })
 
   const dialog = document.createElement('dialog')
   dialog.className = 'cdrom-dialog'
@@ -96,40 +113,88 @@ export function createCdromControl({ emulator, presets = [], setStatus = () => {
   body.append(foot)
   const setMsg = (t) => (foot.querySelector('.msg').textContent = t || '')
 
+  // Controls that kick off a mount — disabled while one is in flight so a slow
+  // reencode can't be left to resolve in the background and clobber whatever gets
+  // mounted afterward. (Belt-and-suspenders: the generation counter below is what
+  // actually guarantees correctness even if one of these somehow fires anyway.)
+  const mountControls = [
+    $('[data-files]'),
+    $('[data-mount-preset]'),
+    $('[data-preset]'),
+    $('[data-iso]'),
+  ].filter(Boolean)
+  const setBusy = (b) => {
+    busy = b
+    renderBtn()
+    for (const el of mountControls) el.disabled = b
+  }
+
   $('[data-close]').addEventListener('click', () => dialog.close())
 
-  async function mount(doMount, label) {
+  // Monotonic token identifying the "current" mount/eject action. A mount() only
+  // applies its result if it's still current when it finishes — otherwise a newer
+  // action (another mount, or an explicit eject) has already superseded it, and
+  // applying a stale result anyway is exactly the "closed the dialog on the files
+  // upload, mounted the preset instead, then the files upload finished late and
+  // silently overwrote it" bug this fixes.
+  let generation = 0
+
+  // `prepare` does the slow, cancellable-in-effect part (reencoding, or just an
+  // arrayBuffer() read); `apply` does the actual emulator.set_cdrom() call, which is
+  // effectively instant for every caller below.
+  async function mount(prepare, apply, label) {
+    const myGen = ++generation
+    setBusy(true)
     setMsg(`mounting ${label}…`)
     try {
-      await doMount()
+      const prepared = await prepare()
+      if (myGen !== generation) return // superseded — drop this result entirely
+
+      // v86 raises the guest's media-change interrupt on eject() but not on a plain
+      // insert (checked tmp-v86/src/ide.js: set_disk_buffer(), used by set_cdrom()
+      // for every insert, never calls push_irq() — only eject() does). Swapping
+      // straight from one disc to another can leave the guest not proactively
+      // notified, only discovering the new disc whenever it happens to re-poll on
+      // its own — which is the "E: sometimes shows empty" bug. Ejecting first
+      // guarantees an interrupt actually fires. Safe unconditionally: eject() is a
+      // no-op if the drive's already empty.
+      emulator.eject_cdrom()
+      await apply(prepared)
+      if (myGen !== generation) return // superseded mid-apply
+
       mounted = true
-      renderBtn()
       setStatus(`mounted ${label}`)
       dialog.close()
     } catch (e) {
+      if (myGen !== generation) return // don't report a stale error over a newer action
+      mounted = false
       setMsg('error: ' + e.message)
       console.error(e)
+    } finally {
+      if (myGen === generation) setBusy(false)
     }
   }
 
-  $('[data-files]').addEventListener('change', async (e) => {
+  $('[data-files]').addEventListener('change', (e) => {
     const files = Array.from(e.target.files || [])
     e.target.value = ''
     if (!files.length) return
-    await mount(async () => {
-      const iso = await buildMediaCdrom(files)
-      await emulator.set_cdrom({ buffer: iso.buffer })
-    }, `${files.length} file(s)`)
+    mount(
+      () => buildMediaCdrom(files),
+      (iso) => emulator.set_cdrom({ buffer: iso.buffer }),
+      `${files.length} file(s)`
+    )
   })
 
   $('[data-mount-preset]')?.addEventListener('click', () => {
     const preset = presets.find((p) => p.id === $('[data-preset]').value)
     if (!preset) return
     mount(
-      () =>
+      () => preset,
+      (p) =>
         emulator.set_cdrom({
-          url: preset.url,
-          size: preset.size,
+          url: p.url,
+          size: p.size,
           async: true,
           fixed_chunk_size: 256 * 1024,
         }),
@@ -137,18 +202,21 @@ export function createCdromControl({ emulator, presets = [], setStatus = () => {
     )
   })
 
-  $('[data-iso]')?.addEventListener('change', async (e) => {
+  $('[data-iso]')?.addEventListener('change', (e) => {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    await mount(
-      async () => emulator.set_cdrom({ buffer: await file.arrayBuffer() }),
+    mount(
+      () => file.arrayBuffer(),
+      (buffer) => emulator.set_cdrom({ buffer }),
       file.name
     )
   })
 
   btn.addEventListener('click', () => {
+    if (busy) return
     if (mounted) {
+      generation++ // invalidate any in-flight mount so it can't clobber this eject
       emulator.eject_cdrom()
       mounted = false
       renderBtn()
