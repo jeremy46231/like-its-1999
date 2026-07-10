@@ -11,6 +11,10 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "fflate": "^0.8.3",
+    "gifenc": "^1.0.3",
+    "midi-file": "^1.2.4",
+    "omggif": "^1.0.10",
     "v86": "^0.5.424",
     "vite": "^8.1.3"
   }

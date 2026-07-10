@@ -12,6 +12,7 @@ import {
   importState,
 } from './persist.js'
 import { createFileBrowser, openLiveFs } from './vmfs/filebrowser.js'
+import { createCdromControl } from './cdrom-ui.js'
 
 // Our custom Windows 98 image (built in tmp-image-build/, checkpoint 03):
 //   - C: (hda) — Win98 SE + absolute mouse (vbmouse) + True Color (VBEMP) + the
@@ -214,6 +215,30 @@ $('browse')?.addEventListener('click', async () => {
     console.error(e)
   }
 })
+
+// --- CD-ROM: user image import + preset discs ---------------------------------
+// v86 always builds a secondary-master ATAPI CD-ROM device (see cpu.js), even when
+// no `cdrom` is passed at boot — so emulator.set_cdrom()/eject_cdrom() just work,
+// no change to the V86 config above needed. Win98 sees it as drive E:, and only one
+// disc can be "in the drive" at a time, same as the real hardware this emulates. The
+// toolbar button + upload/preset/dev-iso modal live in cdrom-ui.js.
+//
+// Preset discs are static, hosted, read-only images (built like hda.img). Mount them
+// by URL (`{ url, size, async: true }`) rather than `{ buffer }` — that makes v86
+// treat it like hda/hdb (an AsyncXHRBuffer whose save_state only serializes its
+// sparse overlay), so a preset never gets embedded whole into every autosave.
+const PRESETS = [
+  {
+    id: 'win98se',
+    label: 'Windows 98 Second Edition (E:\\win98)',
+    url: VM + 'presets/win98se.iso',
+    size: 655591424,
+  },
+]
+
+$('cdrom-slot')?.replaceWith(
+  createCdromControl({ emulator, presets: PRESETS, setStatus })
+)
 
 $('reset')?.addEventListener('click', async () => {
   if (!confirm('Discard your saved session and reset to the clean image?'))

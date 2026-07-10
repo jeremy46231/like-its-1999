@@ -5,7 +5,7 @@
 //   openStateFs(stateBytes, baseSource[, opts]) -> { fs, dev, overlayIndex }
 //   pickHdaOverlay / classifyOverlays — figure out which overlay is which disk
 //   FatFs (fat.js) — readdir / readFile / walk
-//   zipTree (zip.js) — package a walked tree
+//   zipTree / zipFiles (zip.js, fflate-backed) — package a walked tree / a flat list
 //
 // It runs unchanged in Node and the browser; only the *sources* differ (a local file
 // vs. an HTTP Range URL) and those are injected. A `import.meta.main` CLI at the
@@ -14,7 +14,7 @@
 import { parseState, maybeGunzip } from './state.js'
 import { OverlayBlockDevice } from './blockdev.js'
 import { FatFs } from './fat.js'
-import { zipTree, ZipWriter } from './zip.js'
+import { zipTree, zipFiles } from './zip.js'
 
 // Mount a FAT filesystem from a state's disk overlay painted over a base image.
 // If overlayIndex is omitted we try each overlay and keep the one that yields a
@@ -56,13 +56,7 @@ export async function exportDirZip(fs, path, opts = {}) {
 
 // Export an explicit list of files as a flat ZIP.
 export async function exportFilesZip(fs, paths, opts = {}) {
-  const zip = new ZipWriter(opts)
-  for (const p of paths) {
-    const bytes = await fs.readFile(p)
-    const name = p.split('/').filter(Boolean).pop()
-    await zip.add(name, bytes)
-  }
-  return zip.finish()
+  return zipFiles(fs, paths, opts)
 }
 
 // ---------------------------------------------------------------------------------

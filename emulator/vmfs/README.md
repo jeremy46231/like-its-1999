@@ -9,17 +9,21 @@ parser drives two jobs:
 - **Flatten** — bake a state's disk overlays into base image files (the automated
   replacement for `tmp-image-build/scripts/parse_state.py` + `flatten.py`).
 
-## Modules (all dependency-free ES modules)
+## Modules
 
 | file             | what it is                                                                                                                                            |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `state.js`       | parse a v86 state (magic `0x86768676` v6); extract disk overlays; `maybeGunzip`                                                                       |
 | `blockdev.js`    | `OverlayBlockDevice` (overlay painted over a base) + base sources (`nodeFileSource`, `httpRangeSource`, `bufferSource`) + `v86Device` (live emulator) |
 | `fat.js`         | `FatFs` — read-only FAT12/16/32 with VFAT long names: `readdir` / `readFile` / `walk` / `resolve`                                                     |
-| `zip.js`         | `ZipWriter` + `zipTree` — isomorphic ZIP (STORE/DEFLATE, no deps)                                                                                     |
+| `zip.js`         | `zipTree` / `zipFiles` — packages a FatFs tree/list into a ZIP (thin wrapper over [fflate](https://github.com/101arrowz/fflate))                      |
+| `iso9660.js`     | `buildIso9660` — dependency-free ISO9660 (flat, Level 1) writer, for CDs mounted via `emulator.set_cdrom()`; see `../image-import.js`                 |
 | `extract.js`     | `openStateFs`, `exportDirZip`, `exportFilesZip` + a Node CLI                                                                                          |
 | `flatten.js`     | `flattenOne`, `applyOverlayToFile` + a Node CLI                                                                                                       |
 | `filebrowser.js` | `<dialog>` file browser UI + `openLiveFs(emulator)` + `downloadDirZip` (browser)                                                                      |
+
+Everything here is dependency-free except `zip.js`, which leans on `fflate` (zero deps
+itself) rather than hand-rolling DEFLATE/CRC32.
 
 A base disk image is any object with `readRange(offset, length) -> Uint8Array`.
 Locally that's `nodeFileSource('public/vm/hda.img')`; in the browser it's
