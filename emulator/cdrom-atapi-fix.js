@@ -30,10 +30,19 @@
 // against the now-warm cache, which completes synchronously with the normal DRQ +
 // IRQ. The guest experiences a zero-length wait no matter the network latency;
 // the human sees the VM pause briefly on cold reads, like an old drive seeking.
-// Timer interrupts may wake the halted CPU early (that's also what un-wedges a
-// session that got saved mid-fetch), so a reset can still sneak in — the
-// generation counter below drops the stale re-dispatch and the guest's own retry
-// then hits the warm cache, thanks to patches 3 and 4.
+// The driver issues the packet with interrupts disabled (observed flags=0x86),
+// which cuts both ways: nothing can wake the guest mid-command (that's why the
+// halt is so clean — not even timer ticks run), but a machine parked with
+// in_hlt=1 and IF=0 is one v86's main loop treats as dead. So the halt is fenced
+// three ways. A watchdog releases the CPU if the fetch hasn't landed after a few
+// seconds — the guest falls back to its reset-and-retry loop and stays
+// interactive — and further halting is skipped until some fetch completes again,
+// so a dead CDN degrades to an unreadable disc, never a frozen machine.
+// save_state() is deferred while a halt is active, so an autosave can't pickle
+// the halted CPU into IndexedDB (that exact pickle was the prod "VM frozen from
+// the moment it boots" bug). And after any state restore, an in_hlt=1 + IF=0
+// machine is woken — rescuing sessions saved before that guard existed; the only
+// legitimate cli+hlt state is a shutdown screen, which just re-halts.
 //
 // Bug 3 — v86's reset handler aborts in-flight XHRs, so before these patches each
 // reset threw away the very fetch the retry needed, and every retry started
@@ -49,6 +58,16 @@
 // millions of requests under devtools "Slow 4G". Patch 4 makes an identical
 // concurrent request join the existing fetch instead. ATAPI allows a single
 // outstanding command, so the in-flight set stays tiny.
+//
+// Patch 4 also owns failure recovery, because v86's load_file never calls back
+// on a failed ranged load — most notably it deliberately aborts (no retry, no
+// callback) when a server answers a ranged request with 200 + the full body,
+// which Cloudflare's edge was observed doing on the first touch of the preset
+// ISO. Without recovery that one bad response wedged the in-flight entry forever
+// (every later request joins a fetch that will never land — the prod "mount
+// freezes the VM and the network goes silent" bug). Each in-flight entry now
+// re-issues its fetch on a timer (a repeat attempt gets a clean 206) and gives
+// up after a few tries, freeing the entry so a later guest access starts fresh.
 //
 // The prototype patches key off `this.is_atapi`, so the hard disks' IDE
 // interfaces (which share the prototype) keep stock behavior.
@@ -85,6 +104,52 @@ export function installAtapiCdromFix(emulator) {
     // disc swap) so a halt-fetch that raced one of those won't complete a
     // command the guest has since abandoned.
     let generation = 0
+
+    // Failsafe against freezing the machine on a fetch that never lands: once a
+    // halt-fetch times out, stop halting until some fetch completes again.
+    let haltUntrusted = false
+    const HALT_WATCHDOG_MS = 5000
+
+    // True while the CPU is parked by a halt-fetch. Saving a state in that
+    // window would persist in_hlt=1 with the guest's IF=0 — a machine that can
+    // never wake — so save_state() waits it out (capped; the watchdog bounds the
+    // wait anyway).
+    let cpuHalted = false
+    const origSaveState = emulator.save_state.bind(emulator)
+    emulator.save_state = async function () {
+      if (cpuHalted) {
+        await new Promise((resolve) => {
+          const poll = setInterval(() => {
+            if (!cpuHalted) {
+              clearInterval(poll)
+              resolve()
+            }
+          }, 100)
+          setTimeout(() => {
+            clearInterval(poll)
+            resolve()
+          }, HALT_WATCHDOG_MS + 1000)
+        })
+      }
+      return origSaveState()
+    }
+
+    // Wake a machine restored into the unwakeable state (saved mid-halt by an
+    // older build, or an import of such an export). Runs now — the initial
+    // restore already happened before emulator-started — and after every import.
+    const unbrick = () => {
+      const cpu = emulator.v86?.cpu
+      if (cpu?.in_hlt?.[0] && cpu.flags && !(cpu.flags[0] & 0x200)) {
+        cpu.in_hlt[0] = 0
+      }
+    }
+    unbrick()
+    const origRestoreState = emulator.restore_state.bind(emulator)
+    emulator.restore_state = async function (state) {
+      const r = await origRestoreState(state)
+      unbrick()
+      return r
+    }
 
     const cachedRead = (buffer, start, len) => {
       try {
@@ -140,15 +205,30 @@ export function installAtapiCdromFix(emulator) {
         if (
           len > 0 &&
           start + len <= this.buffer.byteLength &&
-          !cachedRead(this.buffer, start, len)
+          !cachedRead(this.buffer, start, len) &&
+          !haltUntrusted
         ) {
           const myGen = ++generation
           // BSY for the handful of instructions that can still run before the
           // halt lands — the same interim status stock v86 shows.
           this.status_reg = 0xd0
           this.cpu.in_hlt[0] = 1
+          cpuHalted = true
+          let landed = false
+          const watchdog = setTimeout(() => {
+            if (landed) return
+            // Release the CPU; the guest resumes its reset-and-retry loop and
+            // the machine stays interactive while (if) the fetch drags on.
+            haltUntrusted = true
+            cpuHalted = false
+            this.cpu.in_hlt[0] = 0
+          }, HALT_WATCHDOG_MS)
           this.buffer.get(start, len, () => {
+            landed = true
+            clearTimeout(watchdog)
+            haltUntrusted = false // fetches demonstrably complete again
             if (generation === myGen) origAtapiHandle.call(this)
+            cpuHalted = false
             this.cpu.in_hlt[0] = 0
           })
           return
@@ -192,24 +272,40 @@ export function installAtapiCdromFix(emulator) {
         buffer.__cdromDedup = true
         const origGet = buffer.get.bind(buffer)
         const inflight = new Map()
+        const RETRY_MS = 8000
+        const MAX_ATTEMPTS = 4
         buffer.get = (offset, length, fn, options) => {
           const key = offset + ':' + length
-          const waiters = inflight.get(key)
-          if (waiters) {
-            waiters.push(fn)
+          const existing = inflight.get(key)
+          if (existing) {
+            existing.waiters.push(fn)
             return
           }
-          inflight.set(key, [fn])
-          origGet(
-            offset,
-            length,
-            (data) => {
-              const done = inflight.get(key)
+          const entry = { waiters: [fn], attempts: 0, timer: 0 }
+          inflight.set(key, entry)
+          const attempt = () => {
+            clearTimeout(entry.timer)
+            if (++entry.attempts > MAX_ATTEMPTS) {
+              // Free the entry so a later guest access starts a fresh fetch —
+              // the waiters are dropped, never fed fabricated data. (The guest
+              // has long since reset those commands anyway.)
               inflight.delete(key)
-              for (const w of done) w(data)
-            },
-            options
-          )
+              return
+            }
+            entry.timer = setTimeout(attempt, RETRY_MS)
+            origGet(
+              offset,
+              length,
+              (data) => {
+                if (inflight.get(key) !== entry) return // superseded attempt
+                clearTimeout(entry.timer)
+                inflight.delete(key)
+                for (const w of entry.waiters) w(data)
+              },
+              options
+            )
+          }
+          attempt()
         }
       }
       return origSetCdrom.call(this, buffer)
