@@ -45,22 +45,26 @@ export function createCdromControl({
   btn.type = 'button'
   let mounted = false
   let busy = false
+  // Grayed out until the guest is actually running — mounting a disc into a machine
+  // that's still booting is meaningless, and this keeps the button visibly present
+  // (rather than absent) throughout the load, matching the HTML placeholder it
+  // replaces so there's no flicker or layout shift.
+  let ready = false
   const renderBtn = () => {
     btn.textContent = mounted ? 'Eject CD' : 'Mount CD'
-    btn.disabled = busy
+    btn.disabled = busy || !ready
   }
   renderBtn()
 
-  // A restored saved session can already have a disc in the drive before this
-  // control ever runs a mount() itself (see persist.js) — sync the label once the
-  // emulator's devices actually exist, so "Mount CD" doesn't lie about an
+  // Enable once the guest is running. Also: a restored saved session can already have
+  // a disc in the drive before this control ever runs a mount() itself (see
+  // persist.js), so sync the label here too — "Mount CD" shouldn't lie about an
   // already-inserted disc. Same internal-reach pattern as vmfs/blockdev.js's
   // openLiveFs (there's no public V86 API for "is a disc currently in the drive").
   emulator.add_listener('emulator-started', () => {
-    if (emulator.v86?.cpu?.devices?.cdrom?.has_disk?.()) {
-      mounted = true
-      renderBtn()
-    }
+    ready = true
+    if (emulator.v86?.cpu?.devices?.cdrom?.has_disk?.()) mounted = true
+    renderBtn()
   })
 
   const dialog = document.createElement('dialog')
