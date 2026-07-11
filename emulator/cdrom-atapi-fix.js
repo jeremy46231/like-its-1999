@@ -1,8 +1,9 @@
-// Runtime patches to v86's ATAPI CD-ROM emulation (v86 src/ide.js), applied to the
+// Runtime patches to v86's IDE emulation (v86 src/ide.js), applied to the
 // IDEInterface prototype reached through the live cdrom device. Together they fix
 // "mount a disc → E:\ stays empty" failures that in practice only hit URL-mounted
-// (async) presets; file uploads mount as fully in-memory SyncBuffers and dodge every
-// one of these by accident. See cdrom-ui.js for the mount paths that depend on this.
+// (async) presets — file uploads mount as fully in-memory SyncBuffers and dodge
+// every one of these by accident — plus one failure (bug 4) that also hits the
+// async hda/hdb images. See cdrom-ui.js for the mount paths that depend on this.
 //
 // Bug 1 — Win98 never notices a disc swap. v86's TEST UNIT READY answers GOOD
 // whenever a disc is present, and its `medium_changed` flag is only ever consumed
@@ -62,12 +63,20 @@
 // Patch 4 also owns failure recovery, because v86's load_file never calls back
 // on a failed ranged load — most notably it deliberately aborts (no retry, no
 // callback) when a server answers a ranged request with 200 + the full body,
-// which Cloudflare's edge was observed doing on the first touch of the preset
-// ISO. Without recovery that one bad response wedged the in-flight entry forever
-// (every later request joins a fetch that will never land — the prod "mount
-// freezes the VM and the network goes silent" bug). Each in-flight entry now
-// re-issues its fetch on a timer (a repeat attempt gets a clean 206) and gives
-// up after a few tries, freeing the entry so a later guest access starts fresh.
+// which Cloudflare's edge was observed doing sporadically (first touch of the
+// preset ISO; later an hdb.img read in prod). Without recovery that one bad
+// response wedged the in-flight entry forever (every later request joins a
+// fetch that will never land — the prod "mount freezes the VM and the network
+// goes silent" bug). Each in-flight entry now re-issues its fetch on a timer (a
+// repeat attempt gets a clean 206) and gives up after a few tries, freeing the
+// entry so a later guest access starts fresh.
+//
+// Because the same 200-for-ranged-request failure hits the hard disk images too
+// — an aborted hda/hdb read has no retry either, so a C:\ or D:\ access just
+// hangs until the guest's own long disk timeout — patch 4's wrapper is applied
+// to hda's and hdb's buffers at startup, not only to mounted discs. (The halt
+// machinery of patch 2 stays CD-only: Win98 is patient with hard disks; it's
+// only the CD path that needed it.)
 //
 // The prototype patches key off `this.is_atapi`, so the hard disks' IDE
 // interfaces (which share the prototype) keep stock behavior.
@@ -258,56 +267,67 @@ export function installAtapiCdromFix(emulator) {
       return origEject.call(this)
     }
 
-    // Patch 4: dedup the disc buffer's range fetches. set_cdrom() is the only way
-    // any disc buffer enters the drive (a reload comes back with an empty drive,
-    // so restores don't bypass it), which makes it the one choke point where we
-    // can wrap the buffer's get(). Identical concurrent requests share one fetch;
-    // every requester's callback still runs. Synchronous buffers (uploads) pass
-    // through the same wrapper unharmed — get() completes inline, so the
-    // in-flight window is zero.
+    // Patch 4: dedup + retry for a disk buffer's range fetches. Identical
+    // concurrent requests share one fetch; every requester's callback still
+    // runs. Synchronous buffers (uploads) pass through unharmed — get()
+    // completes inline, so the in-flight window is zero.
+    const RETRY_MS = 8000
+    const MAX_ATTEMPTS = 4
+    const makeReadsResilient = (buffer) => {
+      if (
+        !buffer ||
+        typeof buffer.get !== 'function' ||
+        buffer.__resilientReads
+      )
+        return
+      buffer.__resilientReads = true
+      const origGet = buffer.get.bind(buffer)
+      const inflight = new Map()
+      buffer.get = (offset, length, fn, options) => {
+        const key = offset + ':' + length
+        const existing = inflight.get(key)
+        if (existing) {
+          existing.waiters.push(fn)
+          return
+        }
+        const entry = { waiters: [fn], attempts: 0, timer: 0 }
+        inflight.set(key, entry)
+        const attempt = () => {
+          clearTimeout(entry.timer)
+          if (++entry.attempts > MAX_ATTEMPTS) {
+            // Free the entry so a later guest access starts a fresh fetch —
+            // the waiters are dropped, never fed fabricated data. (The guest
+            // has long since reset or timed out those commands anyway.)
+            inflight.delete(key)
+            return
+          }
+          entry.timer = setTimeout(attempt, RETRY_MS)
+          origGet(
+            offset,
+            length,
+            (data) => {
+              if (inflight.get(key) !== entry) return // superseded attempt
+              clearTimeout(entry.timer)
+              inflight.delete(key)
+              for (const w of entry.waiters) w(data)
+            },
+            options
+          )
+        }
+        attempt()
+      }
+    }
+
+    // The hard disks' buffers exist from boot; discs go through set_cdrom() —
+    // the only way a disc buffer enters the drive (a reload comes back with an
+    // empty drive, so restores don't bypass it).
+    const primary = emulator.v86.cpu.devices.ide?.primary
+    makeReadsResilient(primary?.master?.buffer)
+    makeReadsResilient(primary?.slave?.buffer)
     const origSetCdrom = proto.set_cdrom
     proto.set_cdrom = function (buffer) {
       if (this.is_atapi) generation++
-      if (buffer && typeof buffer.get === 'function' && !buffer.__cdromDedup) {
-        buffer.__cdromDedup = true
-        const origGet = buffer.get.bind(buffer)
-        const inflight = new Map()
-        const RETRY_MS = 8000
-        const MAX_ATTEMPTS = 4
-        buffer.get = (offset, length, fn, options) => {
-          const key = offset + ':' + length
-          const existing = inflight.get(key)
-          if (existing) {
-            existing.waiters.push(fn)
-            return
-          }
-          const entry = { waiters: [fn], attempts: 0, timer: 0 }
-          inflight.set(key, entry)
-          const attempt = () => {
-            clearTimeout(entry.timer)
-            if (++entry.attempts > MAX_ATTEMPTS) {
-              // Free the entry so a later guest access starts a fresh fetch —
-              // the waiters are dropped, never fed fabricated data. (The guest
-              // has long since reset those commands anyway.)
-              inflight.delete(key)
-              return
-            }
-            entry.timer = setTimeout(attempt, RETRY_MS)
-            origGet(
-              offset,
-              length,
-              (data) => {
-                if (inflight.get(key) !== entry) return // superseded attempt
-                clearTimeout(entry.timer)
-                inflight.delete(key)
-                for (const w of entry.waiters) w(data)
-              },
-              options
-            )
-          }
-          attempt()
-        }
-      }
+      makeReadsResilient(buffer)
       return origSetCdrom.call(this, buffer)
     }
   })
