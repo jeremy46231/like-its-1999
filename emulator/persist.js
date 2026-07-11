@@ -108,6 +108,32 @@ export async function exportState(emulator) {
   URL.revokeObjectURL(a.href)
 }
 
+// GitHub's web URLs (github.com/…/raw/… and /blob/…) 302-redirect to
+// raw.githubusercontent.com, and the *redirect* response carries no CORS header — so a
+// cross-origin fetch dies on the hop before it ever reaches the (CORS-enabled) raw
+// host. Rewrite straight to the raw host so we skip the redirect entirely. Any other
+// URL is returned untouched.
+export function normalizeShareUrl(url) {
+  const m = url.match(
+    /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/(?:raw|blob)\/(.+?)(?:\?.*)?$/
+  )
+  if (m) return `https://raw.githubusercontent.com/${m[1]}/${m[2]}/${m[3]}`
+  return url
+}
+
+// Fetch a state file by URL (the same gzipped artifact exportState produces),
+// decompress it if needed, and return the raw state ArrayBuffer ready to boot from.
+// Used by the ?share= flow. Throws on network error or if the bytes aren't a state.
+export async function fetchState(url) {
+  const resp = await fetch(normalizeShareUrl(url))
+  if (!resp.ok) throw new Error(`fetch failed (${resp.status})`)
+  let raw = await resp.arrayBuffer()
+  const head = new Uint8Array(raw, 0, 2)
+  if (head[0] === 0x1f && head[1] === 0x8b) raw = await gunzip(raw)
+  if (!looksLikeState(raw)) throw new Error('not a valid VM state')
+  return raw
+}
+
 // Load a state file (gzipped or raw), restore it live, and persist it. Returns true
 // on success. Used to receive a passed-around / downloaded state.
 export async function importState(emulator, file) {

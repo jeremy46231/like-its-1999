@@ -30,6 +30,12 @@
       body.fs #toolbar {
         display: none;
       }
+      /* Shown only when the tab is running a ?share= machine (see main.js). */
+      #shared-badge {
+        color: #000;
+        background: #ffcc00;
+        padding: 2px 6px;
+      }
       /* Holds the emulator, centered, and is the element that goes fullscreen. */
       #screen_holder {
         flex: 1 1 auto;
@@ -63,6 +69,7 @@
     <div id="toolbar">
       <button id="fullscreen" type="button">Fullscreen</button>
       <button id="save" type="button">Save</button>
+      <button id="screenshot" type="button">Screenshot</button>
       <button id="export" type="button">Export</button>
       <button id="import-btn" type="button">Import</button>
       <input id="import" type="file" accept=".gz,.bin" hidden />
@@ -70,6 +77,7 @@
       <span id="cdrom-slot"></span>
       <button id="reboot" type="button">Force Reboot</button>
       <button id="reset" type="button">Reset</button>
+      <span id="shared-badge" hidden>shared</span>
       <span id="status">initializing…</span>
     </div>
     <div id="screen_holder">

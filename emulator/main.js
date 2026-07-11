@@ -10,6 +10,7 @@ import {
   clearSavedState,
   exportState,
   importState,
+  fetchState,
 } from './persist.js'
 import { createFileBrowser, openLiveFs } from './vmfs/filebrowser.js'
 import { createCdromControl } from './cdrom-ui.js'
@@ -31,9 +32,29 @@ import { installAtapiCdromFix } from './cdrom-atapi-fix.js'
 // it MUST end in a slash and the host MUST support HTTP Range requests + CORS.
 const VM = import.meta.env.VITE_VM_BASE || '/vm/'
 
+// A ?share=<url> parameter turns this tab into a read-only viewer of someone else's
+// exported machine: we fetch that .bin.gz and boot from it instead of the user's own
+// session, autosave is disabled, and a manual save warns before it clobbers whatever
+// the user had saved locally. This lets a state be handed around by URL.
+const shareUrl = new URLSearchParams(location.search).get('share')
+
 // If the user has a saved session (IndexedDB), boot straight into it; otherwise boot
 // the shipped instant-boot snapshot. Top-level await is fine in an ES module.
-const savedState = await loadSavedState()
+// A shared machine wins over both — but if it fails to load we fall back to normal.
+let sharedState = null
+if (shareUrl) {
+  try {
+    const s = document.getElementById('status')
+    if (s) s.textContent = 'loading shared machine…'
+    sharedState = await fetchState(shareUrl)
+  } catch (e) {
+    console.error('shared machine failed to load:', e)
+    alert(`Couldn't load the shared machine:\n${e.message}\n\nBooting normally.`)
+  }
+}
+const isShared = !!sharedState
+
+const savedState = isShared ? null : await loadSavedState()
 
 const emulator = new V86({
   wasm_path: wasmUrl,
@@ -62,9 +83,11 @@ const emulator = new V86({
   // Instant boot: restore a saved session if we have one, else the shipped
   // settled-desktop snapshot. v86's built-in zstd decompresses the shipped .zst;
   // saved sessions come in already-decompressed as a buffer.
-  initial_state: savedState
-    ? { buffer: savedState }
-    : { url: VM + 'state.bin.zst' },
+  initial_state: sharedState
+    ? { buffer: sharedState }
+    : savedState
+      ? { buffer: savedState }
+      : { url: VM + 'state.bin.zst' },
 
   autostart: true,
 })
@@ -171,7 +194,12 @@ const clock = () =>
   new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
 let saving = false
-async function doSave(label = 'saved') {
+async function doSave(label = 'saved', { auto = false } = {}) {
+  // A shared machine (?share=) isn't the user's session to persist, so drop every
+  // autosave centrally here — the timer/visibility/pagehide/unload hooks below stay
+  // wired unconditionally and simply no-op. Manual saves still go through (guarded by
+  // their own overwrite warning on the Save button).
+  if (auto && isShared) return
   if (saving) return
   saving = true
   try {
@@ -185,8 +213,60 @@ async function doSave(label = 'saved') {
   }
 }
 
-$('save')?.addEventListener('click', () => doSave())
+// A shared machine indicates itself in the toolbar and never autosaves. A manual save
+// is still allowed, but it overwrites the user's own saved session — so we warn first.
+if (isShared) $('shared-badge')?.removeAttribute('hidden')
+
+$('save')?.addEventListener('click', () => {
+  if (
+    isShared &&
+    !confirm(
+      "You're viewing a shared machine. Saving will overwrite your own saved " +
+        'machine with it. Are you sure?'
+    )
+  )
+    return
+  doSave()
+})
 $('export')?.addEventListener('click', () => exportState(emulator))
+
+// Screenshot: export the guest framebuffer as a PNG with every guest pixel blown up
+// to a 3×3 block (nearest-neighbour, no blur) so the pixel art reads crisply at a
+// comfortable size. screen_make_screenshot() returns an <img> already at native guest
+// resolution (graphics) or char-cell resolution (text mode); we just upscale it.
+const SHOT_SCALE = 3
+$('screenshot')?.addEventListener('click', async () => {
+  const img = emulator.screen_make_screenshot()
+  if (!img) return setStatus('screenshot unavailable')
+  try {
+    if (img.decode) await img.decode()
+    else if (!img.complete)
+      await new Promise((res, rej) => {
+        img.onload = res
+        img.onerror = rej
+      })
+    const c = document.createElement('canvas')
+    c.width = img.naturalWidth * SHOT_SCALE
+    c.height = img.naturalHeight * SHOT_SCALE
+    const ctx = c.getContext('2d')
+    ctx.imageSmoothingEnabled = false
+    ctx.drawImage(img, 0, 0, c.width, c.height)
+    const blob = await new Promise((res) => c.toBlob(res, 'image/png'))
+    const stamp = new Date()
+      .toISOString()
+      .slice(0, 19)
+      .replace(/[:T]/g, '-')
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `like-its-1999-${stamp}.png`
+    a.click()
+    URL.revokeObjectURL(a.href)
+    setStatus(`screenshot ${clock()}`)
+  } catch (e) {
+    console.error(e)
+    setStatus('screenshot failed')
+  }
+})
 $('import-btn')?.addEventListener('click', () => $('import')?.click())
 $('import')?.addEventListener('change', async (e) => {
   const file = e.target.files?.[0]
@@ -266,7 +346,7 @@ $('reset')?.addEventListener('click', async () => {
 })
 
 // Autosave periodically and when the tab is hidden (best-effort before close).
-setInterval(() => doSave('autosaved'), 120_000)
+setInterval(() => doSave('autosaved', { auto: true }), 120_000)
 
 // Listen on the TOP document (same-origin): the iframe's own visibilitychange is
 // unreliable, and the top document is the authoritative tab-visibility source. We
@@ -283,9 +363,9 @@ const topDoc = (() => {
   }
 })()
 topDoc.addEventListener('visibilitychange', () => {
-  if (topDoc.visibilityState === 'hidden') doSave('autosaved')
+  if (topDoc.visibilityState === 'hidden') doSave('autosaved', { auto: true })
 })
-window.addEventListener('pagehide', () => doSave('autosaved'))
+window.addEventListener('pagehide', () => doSave('autosaved', { auto: true }))
 
 // Warn before the tab actually closes/navigates away, and kick off a best-effort
 // save right then too — visibilitychange usually beats us to it, but this covers
@@ -299,7 +379,7 @@ const topWin = (() => {
   }
 })()
 topWin.addEventListener('beforeunload', (e) => {
-  doSave('autosaved')
+  doSave('autosaved', { auto: true })
   e.preventDefault()
   e.returnValue = ''
 })
