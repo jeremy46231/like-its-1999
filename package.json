@@ -12,6 +12,7 @@
   "type": "module",
   "dependencies": {
     "fflate": "^0.8.3",
+    "fonteditor-core": "^2.6.3",
     "gifenc": "^1.0.3",
     "midi-file": "^1.2.4",
     "omggif": "^1.0.10",

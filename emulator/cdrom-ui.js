@@ -79,7 +79,8 @@ export function createCdromControl({
         <span class="label">Upload files</span>
         <span class="hint">Images: .png, .jpg, .gif (animated), .webp, .bmp</span>
         <span class="hint">Audio: .mp3, .wav, .ogg, .mid</span>
-        <input type="file" accept="image/*,audio/*,.mid,.midi" multiple data-files />
+        <span class="hint">Fonts: .ttf, .otf, .woff, .woff2</span>
+        <input type="file" accept="image/*,audio/*,.mid,.midi,font/*,.ttf,.otf,.woff,.woff2" multiple data-files />
       </div>
     </div>`
   document.body.appendChild(dialog)
