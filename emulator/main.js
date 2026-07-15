@@ -323,10 +323,17 @@ $('cdrom-slot')?.replaceWith(
   createCdromControl({ emulator, presets: PRESETS, setStatus })
 )
 
-// Like pressing a real PC's reset button: reboots the CPU and reloads the BIOS in
-// place (v86's restart() -> cpu.reboot_internal()), but leaves RAM contents and every
-// disk (C:, D:, and whatever's in the CD-ROM drive) completely untouched — unlike
-// "Reset" below, nothing is discarded.
+// Like power-cycling the PC: reboots the CPU + reloads the BIOS and clears RAM, so
+// Win98 comes up from a cold start. The disks (C:, D:, and whatever's in the CD-ROM
+// drive) are untouched — unlike "Reset" below, no disk state is discarded, and the
+// machine boots straight back into the current C:.
+//
+// We must zero RAM ourselves: v86's restart() (-> cpu.reboot_internal()) deliberately
+// leaves memory intact, which is a *warm* reboot. Win98 does not survive that here — it
+// boots on top of the previous session's stale VMM structures and wedges (bare desktop,
+// hourglass, ring-0 spin forever). Clearing RAM first turns it into a real cold boot,
+// which also makes this the recovery path for a memory-corrupted session (e.g. a broken
+// ?share= snapshot): the poisoned RAM is thrown away and only the clean disk survives.
 $('reboot')?.addEventListener('click', () => {
   if (
     !confirm(
@@ -334,6 +341,8 @@ $('reboot')?.addEventListener('click', () => {
     )
   )
     return
+  const cpu = emulator.v86.cpu
+  cpu.zero_memory(0, cpu.memory_size[0]) // cold boot: discard RAM (see above)
   emulator.restart() // synchronous — cpu.reboot_internal() has already run by the time this returns
   setStatus(`rebooted ${clock()}`)
 })
